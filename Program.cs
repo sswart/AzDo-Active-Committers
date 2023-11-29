@@ -1,9 +1,6 @@
 ﻿// See https://aka.ms/new-console-template for more information
 
-using System.Net.Http.Headers;
-using System.Net.Http.Json;
-using System.Text;
-using System.Text.Unicode;
+using System.CommandLine;
 using Microsoft.TeamFoundation.Core.WebApi;
 using Microsoft.TeamFoundation.SourceControl.WebApi;
 using Microsoft.VisualStudio.Services.Common;
@@ -11,12 +8,32 @@ using Microsoft.VisualStudio.Services.WebApi;
 
 namespace Azdo_Insights;
 
+// ReSharper disable once ClassNeverInstantiated.Global
 public class Program
 {
-    public static async Task Main(string[] args)
+    public static async Task<int> Main(string[] args)
     {
-        var baseUri = Environment.GetEnvironmentVariable("AzDoOrganisation");
-        var pat = Environment.GetEnvironmentVariable("AzDoPAT");
+        var patOption = new Option<string>(
+            name: "--PAT",
+            description: "A Personal Access Token with code read rights.");
+
+        var orgOption = new Option<string>(
+            name: "--Organisation",
+            description: "The name of the Azure DevOps Organisation");
+
+        var rootCommand = new RootCommand("Command to find Active Azure DevOps committers in the last month.");
+        rootCommand.AddOption(patOption);
+        rootCommand.AddOption(orgOption);
+
+        rootCommand.SetHandler(async (organisation, pat) => await GetActiveCommitters(organisation, pat),
+            orgOption, patOption);
+
+        return await rootCommand.InvokeAsync(args);
+
+    }
+    private static async Task GetActiveCommitters(string org, string pat)
+    {
+        var baseUri = $"https://dev.azure.com/{org}";
         var orgUrl = new Uri(baseUri);
         
         var credentials = new VssBasicCredential("", pat);
@@ -60,7 +77,11 @@ public class Program
                 }
                 catch (Exception e)
                 {
+                    Console.WriteLine($"Caught exception while retrieving committers for repository {repo.Name} in project {repo.ProjectReference.Name}");
+                    Console.WriteLine("----------------------------");
                     Console.WriteLine(e.Message);
+                    Console.WriteLine("----------------------------");
+                    Console.WriteLine("Continuing...");
                 }
             }
         }
@@ -68,7 +89,6 @@ public class Program
         var count = allCommitters.Distinct().Count();
         Console.WriteLine($"Found {count} distinct committers in the last month.");
     }
-    private record ProjectRepository(string Project, string Repository);
 }
 
 
